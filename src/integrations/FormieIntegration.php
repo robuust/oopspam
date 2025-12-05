@@ -5,7 +5,7 @@ use Craft;
 use yii\base\Event;
 
 class FormieIntegration {
-  
+
   public $integration = '';
   public function getName(): string {
     return 'Formie';
@@ -13,22 +13,27 @@ class FormieIntegration {
 
   public function parse(string $integration): void {
     $this->integration = $integration;
+
     Event::on(\verbb\formie\services\Submissions::class, \verbb\formie\services\Submissions::EVENT_AFTER_SPAM_CHECK, function(\verbb\formie\events\SubmissionSpamCheckEvent $e){
       $fields = 0;
+      $allFields = [];
       $params = [
-        'content' => []
+        'content' => [],
       ];
-      foreach($e->submission->form->getCustomFields() as $field){
-        switch(get_class($field)){
+
+      $this->extractFields($e->submission->form->getCustomFields(), $allFields);
+
+      foreach ($allFields as $field) {
+        switch (get_class($field)) {
           case 'verbb\formie\fields\formfields\Email':
           case 'verbb\formie\fields\Email':
-            $params['email'] = (string)$e->submission->getFieldValue($field->handle);
-            $fields++;
+            $params['email'] = (string) $e->submission->getFieldValue($field->getFieldKey());
+            ++$fields;
             break;
           case 'verbb\formie\fields\formfields\MultiLineText':
           case 'verbb\formie\fields\MultiLineText':
-            $params['content'][] = (string)$e->submission->getFieldValue($field->handle);
-            $fields++;
+            $params['content'][] = (string) $e->submission->getFieldValue($field->getFieldKey());
+            ++$fields;
             break;
         }
       }
@@ -44,7 +49,18 @@ class FormieIntegration {
       }
     });
   }
-  
+
+  protected function extractFields($fields, &$allFields)
+  {
+    foreach ($fields as $field) {
+      $allFields[] = $field;
+
+      // Check if field acts as a container (Group, Repeater, Fieldset, etc.)
+      if (method_exists($field, 'getFields')) {
+          $this->extractFields($field->getFields(), $allFields);
+      }
+    }
+  }
 }
 
 ?>
